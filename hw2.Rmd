@@ -1,0 +1,87 @@
+---
+title: "hw2"
+author: "Sabrina Lem"
+date: "4/10/2022"
+output: pdf_document
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(tidymodels)
+```
+
+Question 1:
+```{r}
+abalone <-read.csv("abalone.csv")
+# adding age variable 
+abalone['age']<-c(abalone$rings+1.5)
+head(abalone)
+```
+\
+The distribution of age is the same as 'rings', shifted right by 1.5 units.
+\
+Question 2:
+```{r}
+set.seed(1027)
+abalone_split <- initial_split(abalone, prop = 0.7, strata = age)
+abalone_train <- training(abalone_split)
+abalone_test <- testing(abalone_split)
+```
+\
+\
+Question 3: \
+we should not use rings to predict age because age is a function of rings. rings would be a perfect predictor for age, creating bias towards the entire regression and the rest of the estimator coefficients. 
+
+```{r}
+abalone_train_mod <- abalone_train %>% select(-rings)
+abalone_recipe<-
+  recipe(age~., data = abalone_train_mod) 
+abalone_recipe %>%
+  step_dummy(all_nominal_predictors()) %>%
+  step_center(all_predictors()) %>%
+  step_scale(all_predictors()) %>%
+  step_interact(~ starts_with("type"):shucked_weight) %>%
+  step_interact(~ longest_shell:diameter) %>%
+  step_interact(~ shucked_weight:shell_weight)
+```
+\
+\
+Question 4: 
+```{r}
+lm_mod <-linear_reg() %>%
+  set_engine("lm")
+```
+\
+\
+Question 5: 
+```{r}
+lm_wfl<-workflow() %>%
+  add_model(lm_mod) %>%
+  add_recipe(abalone_recipe)
+```
+\
+\
+Question 6:
+```{r}
+lm_fit <-fit(lm_wfl, abalone_train)
+lm_fit %>% extract_fit_parsnip() %>% tidy
+new <-data.frame(type="F", longest_shell = 0.50, diameter = 0.10,
+                 height = 0.30, whole_weight = 4, shucked_weight = 1,
+                 viscera_weight = 2, shell_weight = 1)
+predict(lm_fit, new)
+```
+The predicted age for this abalone is 12.72 years old. 
+\
+\
+Question 7: 
+```{r}
+abalone_train_res<- predict(lm_fit, new_data = abalone_train %>%select(-age))
+abalone_train_res<-bind_cols(abalone_train_res, abalone_train %>% select(
+  age
+))
+abalone_metrics<-metric_set(rmse, rsq, mae)
+abalone_metrics(abalone_train_res, truth = age,
+                estimate=.pred)
+```
+$R^2=0.5394$. This means that about 53.94% of the variation in age can be 
+explained by the predictor variables in the regression created above. 
